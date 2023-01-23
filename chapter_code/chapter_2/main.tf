@@ -1,3 +1,7 @@
+# Code for Chapter 2 of book
+# Deploying an ASG, Launch Configuration, and Security Groups
+# Also exposure to variables, data, and output references
+
 provider "aws" {
     region = "us-east-2"
 }
