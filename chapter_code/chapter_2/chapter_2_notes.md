@@ -1,0 +1,50 @@
+## Chapter 2 - Getting Started with Terraform
+- resources are defined with the convention of `resource` `<provider_resource>` `<name>` where `provider` refers to the backend provider (in this case AWS), `resource` refers to a provider's product (eg EC2 instance), and `name` which can be referenced by other parts of the code.
+- `user_data_replace_on_change = true` - This parameter terminates the original instance and launches a replacement. This is because terraform will typically only update the original in place but `user_data` is only run on initial boot!
+- AWS does not allow traffic to/from an instance by default, so a security group is required.
+    - For an `instance` to use a sg, it needs a `vpc_security_group_ids` argument.
+- Terraform refers to `expressions` as anything that returns a value.
+    - `Literals` are the simplest type (strings and numbers)
+    - `references` can be used to refer to other parts of the code, like a `resource attribute reference` which uses syntax like `<provider>_<type>.<name>.<attribute>`
+        - Remember that resources have `<name>` in their definition syntax that can be referred to elsewhere (like by a `resource attribute reference`)
+        - `<attribute>` can be an argument (eg name) or something "exported" by the resource (eg `id` in the case of security groups).
+- References between resources creates "implicit dependencies" on each other, so terraform creates a dependency graph to determine in what order to create resources (if all applied from scratch) or in parallel if possible.
+- Like in other languages, we can assign values to variables to be used throughout our code and minimize repetitiveness. Variables are delcared using syntax like `variable "NAME" { [CONFIG ...] }`
+    - The body of the variable declaration (in the config brackets) can contain:
+        - `description` - can be used as documentation in code but also is output to terminal when running `plan` or `apply`.
+        - `default` - a way to set a "fallback" value for the variable.
+        - `type` - set constraints for what can be passed in.
+        - `validation` - custom input validation rules (eg char length)
+        - `sensitive` - if `true`, terraform won't log it when you run `plan` or `apply`, so useful for things like secrets.
+    - After declaring a variable, we can reference it with the syntax `var.<VARIABLE_NAME>` and use this in place of hardcoding the same value in multiple places!
+    - They can also be used in a string literal (like our `user_data` script) using an `interpolation` with the syntax of `${...}`.
+- We can not only create input variables as above but also `output` variables using syntax like `output "<NAME>" { value = <VALUE> [CONFIG...]}`.
+    - `name` is how we can reference it elsewhere in the code.
+    - `value` can be any terraform expression to be outputted.
+    - `config` can contain the parameters:
+        - `description` - similar to how it's used in `variable` parameterss
+        - `sensitive` - similar to `variable`
+        - `depends_on` - a way to tell terraform there is a dependency between resources that it might not pick up through its own dependency graph.
+    - outputs can be outputted without `plan` or `apply` by using `terraform output`.
+- AWS Auto Scaling Group (ASG) is used to manage the size of the cluster based on factors like individual server health, traffic, etc...
+    - They require a `launch configuration` which is declared similar to an `aws_instance` resource, but does use slightly different parameters (`image_id` vs `ami` respectively).
+        - Since they automatically launch new instances as needed, you don't need the `user_data_replace_on_change` parameter previously in the notes!
+    - Defining the ASG has a `min_` and `max_size` to have boundaries on how many instances it will create.
+    - `launch configurations` have a `lifecycle` parameter which is necessary to allow for updates. Because the `aws_autoscaling_group` references the `launch configuration`, deleting and creating the launch config is not possible.
+        - This allows terraform to create a new `launch configuration` first, update the reference within the `aws_autoscaling_group`, then delete the old one.
+    - ASGs also need a `subnet_ids` parameter so they know what VPC subnets to deploy the EC2 instances.
+- `data` sources allow us to get read-only info from the provider to be used in our code as a reference, kind of like how variables are used! Their syntax is `data "<PROVIDER>_<TYPE>" "<NAME>" { [CONFIG...] }`. `type` in this case refereces to the data source you want to use (eg `vpc`).
+    - Elsewhere in code, they can be referenced with the syntax `data.<PROVIDER>_<TYPE>.<NAME>.<ATTRIBUTE>`.
+    - Attributes of `data` sources can also be used within other `data` sources, for example getting `aws_subnets` data can use something like `data.aws_vpc.default.id` within its `filter` config block to retrieve subnet information from the default vpc (See code for this in action).
+- Elastic Load Balancers (ELBs) allow you to have one resource that as the ingress point for your cluster and distributes traffic across them. This provides your users a single IP/URL to use vs individual IPs for each EC2 instance. There are three types:
+    - Application Load Balancer (ALB) - best suited for HTTP(S) traffic.
+    - Network Load Balancer (NLB) - best for TCP, UDP, and TLS, and can scale to load faster than an ALB (designed to scale for tens of millions of requests per second).
+    - Classic Load Balancer (CLB) - "legacy" load balancer.
+- ALBs 
+    - They consist of several parts:
+        - Listener - specific port and protocol it listens on.
+        - Listener Rule - takes requests into the listener and sends them to specific target groups based on paths or hostname matches.
+        - Target Groups - One or more servers that receive requests. The Group assess the health of its servers and only sends requests to healthy nodes.
+    - They are created by defining a few resources: the ALB itself (`aws_lb` with `application` defined in parameters), the `aws_lb_listener`, the `aws_lb_listener_rule`, the `aws_lb_target_group`, and an `aws_security_group` for the ALB.
+    - We can change our `output` for public IP to the `dns_name` of our `aws_lb` resource, so that we now get the singular, public address the ALB will use to front our cluster!
+    
