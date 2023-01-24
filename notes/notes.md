@@ -48,3 +48,28 @@
     - They are created by defining a few resources: the ALB itself (`aws_lb` with `application` defined in parameters), the `aws_lb_listener`, the `aws_lb_listener_rule`, the `aws_lb_target_group`, and an `aws_security_group` for the ALB.
     - We can change our `output` for public IP to the `dns_name` of our `aws_lb` resource, so that we now get the singular, public address the ALB will use to front our cluster!
     
+## Chapter 3 - How to Manage Terraform State
+- Running `terraform apply` records information about the current state of infrastructure in a terraform `state file`.
+    - By default, this file is created in your working directory as `terraform.tfstate` and is a JSON file that maps resources in your config to the real world resources in AWS.
+    - Running `plan` is essentially diffing your code against the deployed infrastructure.
+    - Never edit this file by hand!
+    - Some challenges arise when using terraform as a team: how to use shared storage for state files, how to lock state files when someone's using it, and how to isolate state files between environments (dev vs prod).
+- Shared Storage for State Files
+    - The best way to manage shared storage for state files is to use remote `backends`; the built-in way terraform determines how to load and store state.
+    - Through chapter 2, we used a `local backend`, a state file saved to local disk. In a distributed team, we would want to use something `remote` and accessible to everyone, such as S3. They solve common problems such as:
+        - Manual error - the state file will be loaded and then stored again after each `plan` and `apply`, preventing any manual error.
+        - Locking - many remote backends support some type of locking feature, allowing for one individual to run `apply` and affect changes at a time.
+        - Secrets - most remote backends support in-transit and at-rest encryption of the state file, as well as IAM policies for acess control. Additionally, using a remote backend prevents storing secrets in plain-text on local disk.
+    - S3 offers a number of benefits and will be used through this course.
+    - Defining an S3 bucket is similar to other `resources` but a few notes:
+        - The `bucket` parameter is the real world name we're giving to the bucket, and this must be *globally unique* to all AWS customers!
+        - We can set a `prevent_destory` policy within the `lifecycle` parameter to prevent an `apply` from deleting that resource (terraform will exit with an error).
+        - We need to define other resources to enable feaures like versioning, encryption, blocking public access...
+    - DynamoDB tables are used for locking the state files while in use.
+        - When creating this resource, it *must* have a primary key called `LockID` (exact spelling and capitalization).
+    - Terraform requires a `backend` configuration so that it knows to store your state file in your S3 bucket instead of locally on disk!
+        - This is done by adding a `terraform` block that configures terraform itself, and uses the syntax `terraform { backend "<BACKEND_NAME>" { [CONFIG...] }}` where `BACKEND_NAME` is the backend we want to use (eg S3). See the code for more detail!
+    - After configuring the bucket and `terraform` block to use the bucket for remote state file storage, if we run `terraform init` again, it will then begin to store the state file in the bucket and use in this configuration.
+    - Interestingly, we had to write code to create the bucket and DynamoDB table and use a local backend for that state file. Then we wrote code to add a backend for the bucket and table, then reinitialize terraform to use it.
+        - The good news this is a one time process, and the rest of our code can use this `backend` configuration from the get go.
+    - Note that we also have to manually write the `terraform` backend configuration for every module (learned in later lessons) and can't use variables. We also have to have a unique key (file path within the bucket) for every module we create, so be careful not to just copy and paste the backend config verbatim.
