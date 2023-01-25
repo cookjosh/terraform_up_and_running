@@ -129,4 +129,14 @@
     - File Paths - the `user_data.sh` file is now in our modules folder, and terraform's `templatefile` function reads files from the *relative path* on local disk, meaning when we first created the module, neither environment would be able to successfully call it.
         - We can instead user a `path reference` (`path.<TYPE>`) such as `path.module`. In this case it will use the filesystem path of the module *where the expression is defined*.
         - So in our module's `main.tf` where we define the path of our script, we want to prefix with our path type like so: `${path.module}/user_data.sh` so that other environments know this file is located within the module definition path!
-    - Inline blocks
+    - Inline blocks - some configuration for resources can either be inline block-defined or defined as separate resources. For example, the `ingress` and `egress` definitions we've done for the security group resource can actually be their own separate resources `aws_security_group_rule`.
+        - Mixing the two however can lead to conflict errors as they may attempt to overwrite each other, so when creating modules, it may be best to define them as separate resources. This is because the separate resources can be added anywhere whereas the inline block only applies to the module that creates the resource.
+        - To further clarify, in our module we originally defined the `ingress` and `egress` in `aws_security_group alb` so users won't be able to add more rules outside of the module.
+        - Changing these to their own resources then allows us in an environment `main.tf`, for example in `stage`, to define additional rules if desired when importing the module while retaining the defaults we create in the module `main.tf`
+        - Had we left the original inline blocks in the module `main.tf`, creating additional during the module import would have lead to errors in the rules attempting to overwrite one another.
+- Important Note: The book, for simplicity, uses on VPC for both `stage` and `prod` environments. This is not recommended or ideal in actual real world production. Misconfigurations in either environment to critical resources (like route tables) could affect traffic to and from the entire VPC affecting all environments.
+    - Thus it is recommended to use separate VPCs, or even separate AWS accounts if possible, to achieve isolation between environments.
+- **Module Versioning**
+    - So far we created one module that is imported into both `stage` and `prod` environments. This causes an issue in that changes to the module will affect both environments, making testing changes in `stage` much more likely to affect production. A better approach would be to use `versioned modules`, with versions applying to separate environments.
+    - An easy way to achieve this versioning is to store module code in a separate git repo and setting the `source` parameter of the module imports to that URL.
+
