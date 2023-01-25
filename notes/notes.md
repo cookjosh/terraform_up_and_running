@@ -54,12 +54,12 @@
     - Running `plan` is essentially diffing your code against the deployed infrastructure.
     - Never edit this file by hand!
     - Some challenges arise when using terraform as a team: how to use shared storage for state files, how to lock state files when someone's using it, and how to isolate state files between environments (dev vs prod).
-- Shared Storage for State Files
+- **Shared Storage for State Files**
     - The best way to manage shared storage for state files is to use remote `backends`; the built-in way terraform determines how to load and store state.
     - Through chapter 2, we used a `local backend`, a state file saved to local disk. In a distributed team, we would want to use something `remote` and accessible to everyone, such as S3. They solve common problems such as:
-        - Manual error - the state file will be loaded and then stored again after each `plan` and `apply`, preventing any manual error.
-        - Locking - many remote backends support some type of locking feature, allowing for one individual to run `apply` and affect changes at a time.
-        - Secrets - most remote backends support in-transit and at-rest encryption of the state file, as well as IAM policies for acess control. Additionally, using a remote backend prevents storing secrets in plain-text on local disk.
+        - **Manual error** - the state file will be loaded and then stored again after each `plan` and `apply`, preventing any manual error.
+        - **Locking** - many remote backends support some type of locking feature, allowing for one individual to run `apply` and affect changes at a time.
+        - **Secrets** - most remote backends support in-transit and at-rest encryption of the state file, as well as IAM policies for acess control. Additionally, using a remote backend prevents storing secrets in plain-text on local disk.
     - S3 offers a number of benefits and will be used through this course.
     - Defining an S3 bucket is similar to other `resources` but a few notes:
         - The `bucket` parameter is the real world name we're giving to the bucket, and this must be *globally unique* to all AWS customers!
@@ -73,3 +73,29 @@
     - Interestingly, we had to write code to create the bucket and DynamoDB table and use a local backend for that state file. Then we wrote code to add a backend for the bucket and table, then reinitialize terraform to use it.
         - The good news this is a one time process, and the rest of our code can use this `backend` configuration from the get go.
     - Note that we also have to manually write the `terraform` backend configuration for every module (learned in later lessons) and can't use variables. We also have to have a unique key (file path within the bucket) for every module we create, so be careful not to just copy and paste the backend config verbatim.
+- **State File Isolation**
+    - So far through the book, we've written all of our tf code in one file and folder, using one backend config, which stores **all** of our state in a single file. This means one mistake could break our entire infrastructure.
+    - There are two ways we can chose to isolate state files, either by `Isolation via workspaces` or `isolation via file layout`.
+    - **Isolation via Workspaces**
+        - By default, terraform starts with a single workspace called `default`, and this workspace stores state files in the `key` you specify in your backend configuration.
+        - You can use `terraform workspace new {workspace_name}` to create new isolated workspace environments, and running `apply` on the same configuration files but in different workspaces will create new resources.
+        - Creating workspaces and applying configs creates an `env` folder in your s3 bucket, with child folders for each workspace that contain their own state files.
+        - You can switch between resources with `terraform workspace select {workspace_name}`.
+        - This is a nice way to test changes on a deployed module without affecting running infrastructure!
+        - Drawbacks include:
+            - Using the same credentials for all workspaces, which prevents true isolation.
+            - Workspaces are not visible in the code, so real world infrastructure may be different than the codebase.
+    - **Isolation via File Layout**
+        - Full isolation can be achieved by putting config files for different environments (eg prod and dev) in their own folders, and by configuring a different backend for each environment that can have different authentication and access controls.
+            - [An example can be found here](https://blog.gruntwork.io/how-to-manage-terraform-state-28f5697e68fa#:~:text=Here%E2%80%99s%20the%20file%20layout%20for%20my%20typical%20Terraform%20project%3A)
+            - To take it further, you could also put separate "components" into their own folders like a `mgmt` folder for more static resources (eg VPCs, subnets, etc...) and `services` (eg a frequently modified webapp) so that constant changes in one component won't run the risk of modifying static infrastructure.
+        - Terraform doesn't care about filenames but it is useful to follow some convention for your team. Examples would be:
+            - `variables.tf` for input vars, `outputs.tf` for output vars, `main.tf` for resources and data sources, etc... You can go further such as `providers.tf` for quick reference of provider information.
+        - This layout has some advantages like clear understanding of how components are deployed and in what environments, and there's decent isolation to minimize the blast radius of any mistakes.
+            - However a drawback is that now `apply` has to be run in each module individually to create your entire infrastructure.
+    - **`terraform_remote_state` Data Source**
+        - This data source is useful to allow us to get a state file of other modules to use that information in a module we might be currently working in!
+        - For this topic we wil create a MySQL db on AWS RDS. Important notes:
+            - The DB creation will require a username and password passed in. Since we want to avoid secrets in plain text, for now we will create variables in `variables.tf` and pass those values in via the command line for example `export TF_VAR_db_username=<username>`
+            - We also create output variables about the DB that we want our webserver cluster to take as input so it can connect to the DB. We do this by adding a `data` block to the `main.tf` file for the cluster and pointing it to the statefile for the DB.
+            - We also use a `templatefile` to read in data from a bash script, as opposed to inline Bash, that was formerly in the `user_data` parameter of `main.tf`
