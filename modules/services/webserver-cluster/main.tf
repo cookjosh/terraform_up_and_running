@@ -33,7 +33,7 @@ resource "aws_autoscaling_group" "example" {
 
     target_group_arns = [aws_lb_target_group.asg.arn] # Using this reference prevents us from having to hardcode ARNs
     health_check_type = "ELB" # This health check uses additional metrics (not serving requests) to determine health
-
+   
     min_size = var.min_size
     max_size = var.max_size
 
