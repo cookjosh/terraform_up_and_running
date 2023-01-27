@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 module "webserver_cluster" {
-    source = "git@github.com:cookjosh/terraform_up_and_running.git"
+    source = "github.com/cookjosh/terraform_up_and_running"
 
     cluster_name           = "webservers-stage"
     db_remote_state_bucket = "terraform-up-and-running-state-book-jcook"
