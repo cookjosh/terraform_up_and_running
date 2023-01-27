@@ -1,3 +1,6 @@
+# Overall Notes
+This file is the overall notes from my progression through the book, which was originally [this series of blogposts](https://blog.gruntwork.io/a-comprehensive-guide-to-terraform-b3d32832baca#.b6sun4nkn). I've linked the blogpost throughout for relevant images as well. For each chapter, I broke out the individual chapter notes into their own file in their respective chapter folder in the repo.
+
 ## Chapter 2 - Getting Started with Terraform
 - resources are defined with the convention of `resource` `<provider_resource>` `<name>` where `provider` refers to the backend provider (in this case AWS), `resource` refers to a provider's product (eg EC2 instance), and `name` which can be referenced by other parts of the code.
 - `user_data_replace_on_change = true` - This parameter terminates the original instance and launches a replacement. This is because terraform will typically only update the original in place but `user_data` is only run on initial boot!
@@ -139,4 +142,28 @@
 - **Module Versioning**
     - So far we created one module that is imported into both `stage` and `prod` environments. This causes an issue in that changes to the module will affect both environments, making testing changes in `stage` much more likely to affect production. A better approach would be to use `versioned modules`, with versions applying to separate environments.
     - An easy way to achieve this versioning is to store module code in a separate git repo and setting the `source` parameter of the module imports to that URL.
+
+## Chapter 5 - Tips and Tricks: Loops, If-Statements, Deployment, and Gotchas
+As a declarative language certain operations are more difficult like loops, if-statements, etc.. Luckily terraform does provide a few primitives that we will see in this chapter! We can use these in a few different loop constructs in terraform:
+- **Loops with the `count` parameter** - loops over resources and modules. We will see this in action by creating a number of users with AWS IAM.
+    - Every resource has `count` as a parameter. It is quite primitive and all it does on its own is define the number of copies we want to make of that resource.
+    - As you can see in the code, we can use `count.index` to append the index to a value for the resource's `name` parameter as count iterates through the value we set for itself (`count = 3 name = "neo.${count.index}"`). In this instance though, each user would be named `neo.` with whatever value of the index was iterated next which may not be particularly useful.
+        - Instead, we could create a variable called something like `user_names` with a default value of a list that has 3 separate names. 
+        - Since terraform also has arrays (using the `Array lookup syntax`) and a length function, we can combine these with count using like so: `count = length(var.user_names) \n name = var.user_names[count.index]`. So here `count` is set to the length of the list in teh variable, and we iterate through count and use each integer back against the list as its index and the usernames are pulled in from each index.
+        - What we've done now is create `aws_iam_user.example` as an array, not a single resource, so it can't be accessed with the usual syntax of `<PROVIDER>_<TYPE>.<NAME>.<ATTRIBUTE>` (a user name as `aws_iam_user.example.name`), instead we also need to use array lookup syntax on it like `<PROVIDER>_<TYPE>.<NAME>[INDEX].<ATTRIBUTE>`. See the `outputs.tf` file for examples!
+    - `count` can also be used on modules just like resources. When we import a module, we can add `count` as a parameter (just like we did the with the `aws_iam_user` example), point it to a variable to get an array or list, and use `count.index` to iterate through the list the same way.
+    - `count` cannot be used in inline blocks however. Consider the `tag` block of our `aws_autoscaling_group` resource. Unfortunately we cannot write code that allows users to pass in tags during creation by setting up similar logic to our previous examples here.
+    - Another limitation of `count` is that, again, resources become arrays, so changing values of a resource can lead to destroying parts of the array. 
+        - In our examples above, we had a `user_names` list variable that had 3 usernames within it. Say we created 3 users and user `trinity` was at index 1 (`aws_iam_user.example[1]`). If we decided we wanted to remove trinity from the list, because of her position in the list, terraform will instead rename her to morpheus and delete the original morpheus user.
+        - Terraform is essentially deleting every item to the right of trinity in the list and recreating them one index position to the left.
+        - The end result *looks* the same, but this can lead to data loss. A
+        \gain the morpheus user is not the original user, it has been destroyed and recreated!
+- **Loops with `for_each` Expressions** - The `for_each` expression allows us to loop over lists, sets, and maps to create a) multiple copies of an entire resource, b) multiple copies of an inline block within a module, or c) multiple copies a module itself.
+    - THe syntax looks like `resource "<PROVIDER>_<TYPE>" "<NAME>" { for_each = <COLLECTION> [CONFIG...]}`
+        - `COLLECTION` is a set or map to loop over (lists are not supported in `for_each` on a resource) and `CONFIG` consists of one or more arguments specific to that resource.
+            - In `CONFIG` you can use `each.key` and `each.value` for the current item in `COLLECTION`.
+        - Look at the code for the example, but when `for_each` loops over the `user_name` *set* it makes each username available under `each.value`, which we assign to `name` for each IAM user resource that is created.
+            - `each.key` also contains the username(s) but is typically only used with maps and key-value pairs.
+        - Using `for_each` on a resource creates a *map* of resources as opposed to one resource (or an *array* or resources as with `count`). The keys in the map are the usernames (the keys) in `for_each`. Accessing specific information then, like the ARN as before, requires a different sytnax `value = values(aws_iam_user.example)[*].arn` for our `output` variable. See the code.
+    - The fact that `for_each` creates maps is a big deal compared to `count`! Because it creates a map, terraform doesn't depend on the indexing of a list if we make changes as before, so we can safely remove an element from the map without the concerns we had before of editing the list! For this reason it may be preferable to choose `for_each` over `count` to create multiple copies of a `resource`.
 
