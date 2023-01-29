@@ -145,6 +145,7 @@ This file is the overall notes from my progression through the book, which was o
 
 ## Chapter 5 - Tips and Tricks: Loops, If-Statements, Deployment, and Gotchas
 As a declarative language certain operations are more difficult like loops, if-statements, etc.. Luckily terraform does provide a few primitives that we will see in this chapter! We can use these in a few different loop constructs in terraform:
+### Loops
 - **Loops with the `count` parameter** - loops over resources and modules. We will see this in action by creating a number of users with AWS IAM.
     - Every resource has `count` as a parameter. It is quite primitive and all it does on its own is define the number of copies we want to make of that resource.
     - As you can see in the code, we can use `count.index` to append the index to a value for the resource's `name` parameter as count iterates through the value we set for itself (`count = 3 name = "neo.${count.index}"`). In this instance though, each user would be named `neo.` with whatever value of the index was iterated next which may not be particularly useful.
@@ -172,5 +173,44 @@ As a declarative language certain operations are more difficult like loops, if-s
             - These can be updated at any point and terraform will make those changes in place if we desire.
         - Finally we add a `dynamic` block to the ASG resource in `main.tf` for the `webserver-cluster` within `modules`. The syntax is `dynamic "<VAR_NAME>" { for_each = <COLLECTION> content{[CONFIG...]}}`:
             - `<VAR_NAME>` is what we want to pass into the instance as the variable name (in this case "tag").
-            - `COLLECTION`
-
+            - `COLLECTION` is the list or map of variables we want to iterate over (in this case `var.custom_tags`).
+        - What is happening here is that for each instance that is created by the ASG, create dynamic variables (module sees `var.custom_tags` in the module's `variables.tf`) for the keys we specified during the module import within `main.tf` in the `prod` module block of `webserver-cluster`.
+            - We specified `Owner` and `ManagedBy` with their own respective values.
+    - *Note on tags* - it is best practice to come up with a tagging standard for your team, which can be tedious to enforce if you are using the above method to set "globally-default" tags on every resource in your entire AWS environment.
+        - For these types of tags, you can define a `default_tags` block within your `provider` block to ensure that all resources will have these minimal default tags applied!
+- **Loops with the `for` String Directive** - We've previously see string interpolations allowing us to reference variables within strings, like "Hello, ${`var.name`}". `String directives` allow us to use control statements (for-loops and if-statements) within a string and use a similar, but different, syntax.
+    - That syntax is `%{ for <ITEM> in <COLLECTION> }<BODY>%{ endfor }`. Note that here we use a `%` and not a `$` like in string interpolation.
+        - `COLLECTION` is a list or map to loop over, `ITEM` is the local var name to assign to each item in `COLLECTION`, and `BODY` is what to render.
+### Conditionals
+Terraform offers several different ways to do conditionals, just like with loops.
+- **Conditionals with the `count` Parameter**
+    - **If-statements with the count parameter**
+        - Terraform supports *conditional expressions* in *ternary syntax* to combine `if` statements with our `count` parameter to achieve things like applying `autoscaling` to prod resources and not to stage. The syntax is `<CONDITION> ? <TRUE_VAL> : <FALSE_VAL>`
+        - First we define a boolean variable in the `variables.tf` for our cluster in `modules` called `enable_autoscaling`.
+        - Next we define `aws_autoscaling_schedule` in the module's `main.tf` similar to how we previously defined it directly in the `prod` import, but here we add a first line of `count = var.enable_autoscaling ? 1 : 0`.
+            - In the `module` import block of each `main.tf` in prod and stage, we can then set `enable_autoscaling` to either true or false. If true, then the `aws_autoscaling_schedule` resources we defined in the module's `main.tf` will be created!
+    - **If-else statements with the `count` parameter**
+        - The book has a self-admitted contrived example for demonstrating this, but it does give good insight into how this might work, using IAM policies and attaching them based on boolean logic.
+            - The example uses two `aws_iam_policy` resources, one read-only and one full access, and two associated `data` blocks that each pulls the policy rules from.
+            - Then we create a boolean variable for granting the user one policy or the other.
+            - Then we create two `aws_iam_user_policy_attachment` resources, each one with their own `count` parameter.
+                - The interesting part is that the policy attachment for full access has a `count` parameter of `count = var.give_full_access ? 1 : 0` while the read-only attachhment has `count = var.give_full_access ? 0 : 1`.
+                - So if the variable we're referencing is set to `true`, then the user gets the full access policy attachment applied, or will get read-only applied if its `false`.
+                - This inverse logic is how we can do an `if-else` clause in terraform!
+- **Conditions with `for_each` and `for` Expressions**
+    - We can improve our original dynamic tag logic from earlier in the chapter by adding some `for_each` and `for` logic to it.
+    - In this example we `for` logic to the loop to use uppercase on the value of each tag (maybe for consistency), but to also skip any keys set to "Name", because we've already defined it in the block above.
+    - The book recommends using `count` to conditionally create resources and modules, and using `for_each` for other types of loops and conditionals.
+- **Conditionals with the `if` String Directive**
+    - I read through this portion but did not add the code, simply because at the moment I was not interested in outputting the users list, however this is a good topic to review to manipulate, or further refine, how we can use conditionals in string directives to format how our output will be presented in the terminal (or referenced by other resources)!
+### Zero Downtime Deployment
+So far our work has been to build a clean and simple API for deploying our cluster, and we have not dealt with how we might want to push updates of our code (our simple "Hello, World!" website)/deploy a new AMI across the cluster; and certainly have not explored how to do that with zero downtime.
+- In real world production, our webserver code probably live within the AMI itself, so we wouldn't necessarily be deploying new images. But in our examples throughout the book, all of that data is in the `user_data.sh` script, and the AMI is a vanilla Ubuntu image, so we'll make some changes to illustrate this process!
+    - To do this, we will define a default AMI in `variables.tf` for the cluster module, as well as a default string for the webserver to return, as their own variables.
+    - Since we're defining the default text in the variable, we need to edit `user_data.sh` to use that variable. We will also edit the `image_id` parameter within the `aws_launch_configuration` resource definition to use the `var.ami`, and add the `server_text = var.server_text` logic into `user_data`'s templatefile call.
+    - If we now use `main.tf` in `stage` to illustrate this, and we add parameters for `ami` and `server_text` for the module import to consume, we will see that running `plan` shows us it wants to replace the old launch config with a new one that has the updated `user_data`, and it wants to modify the ASG to reference that new launch config.
+    - We now have the issue that this reference will not do anything until we instruct the ASG to launch new instances. We could have terraform destroy the old ASG and launch a new one, but users will experience downtime. Using the `create_before_destroy` lifecycle setting though can let us spin up a replacement **before** destroying the old ASG!
+        - First we can configure the ASG `name` parameter to depend on the name of the launch configuration (so when the launch config name changes, terraform will see that and force a replacement of the ASG).
+        - Set `create_before_destroy` to `true` for the ASG.
+        - Set `min_elb_capacity` of the ASG to the `min_size` of the cluster so that terraform will wait for at least that many new servers in the new ASG to be created before passing health checks in the ALB and destroying the original ASG.
+        - A nice feature here is that during the rollout of the new ASG, if there is any issues preventing the new instances of launching, terraform will roll back to the last version after a `wait_for_capacity_timeou` (default is 10 minutes) of the `min_elb_capacity` we set to register with the ALB.
