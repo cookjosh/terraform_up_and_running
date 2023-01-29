@@ -166,4 +166,11 @@ As a declarative language certain operations are more difficult like loops, if-s
             - `each.key` also contains the username(s) but is typically only used with maps and key-value pairs.
         - Using `for_each` on a resource creates a *map* of resources as opposed to one resource (or an *array* or resources as with `count`). The keys in the map are the usernames (the keys) in `for_each`. Accessing specific information then, like the ARN as before, requires a different sytnax `value = values(aws_iam_user.example)[*].arn` for our `output` variable. See the code.
     - The fact that `for_each` creates maps is a big deal compared to `count`! Because it creates a map, terraform doesn't depend on the indexing of a list if we make changes as before, so we can safely remove an element from the map without the concerns we had before of editing the list! For this reason it may be preferable to choose `for_each` over `count` to create multiple copies of a `resource`.
+    - `for_each` also has the advantage of creating multiple inline blocks withn a resource. We will see how to use it to generate dynamic `tag` inline blocks for the ASG in the `webserver-cluster` module.
+        - First we create a new map input variable that allows users to specify custom tags in `variables.tf` of the module.
+        - Next we can try setting custom tags in the `prod` `webserver-cluster` module import by defining a `custom_tags` block that has dynamic key/value tags.
+            - These can be updated at any point and terraform will make those changes in place if we desire.
+        - Finally we add a `dynamic` block to the ASG resource in `main.tf` for the `webserver-cluster` within `modules`. The syntax is `dynamic "<VAR_NAME>" { for_each = <COLLECTION> content{[CONFIG...]}}`:
+            - `<VAR_NAME>` is what we want to pass into the instance as the variable name (in this case "tag").
+            - `COLLECTION`
 
