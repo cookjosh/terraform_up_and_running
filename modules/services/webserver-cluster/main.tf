@@ -40,12 +40,9 @@ resource "aws_autoscaling_group" "example" {
    
     min_size = var.min_size
     max_size = var.max_size
-
-    # Sets a minimum of servers that need to exist before the ASG deployment is complete
-    min_elb_capacity = var.min_size
     
     lifecycle {
-        create_before_destroy = true
+        create_before_destroy = false
     }
 
     tag {
@@ -93,17 +90,20 @@ resource "aws_autoscaling_schedule" "scale_in_at_night" {
 
 resource "aws_security_group" "instance" { # AWS does not allow traffic to/from an instance by default, so an sg is required
     name = "${var.cluster_name}-instance"
-
-    ingress {
-        from_port   = local.http_port
-        to_port     = local.http_port
-        protocol    = local.tcp_protocol
-        cidr_blocks = local.all_ips
-    }
 }
 
 resource "aws_security_group" "alb" {
     name = "${var.cluster_name}-alb"
+}
+
+resource "aws_security_group_rule" "allow_server_http_inbound" {
+    type              = "ingress"
+    security_group_id = aws_security_group.instance.id
+
+    from_port   = var.server_port
+    to_port     = var.server_port
+    protocol    = local.tcp_protocol
+    cidr_blocks = local.all_ips
 }
 
 resource "aws_security_group_rule" "allow_http_inbound" {

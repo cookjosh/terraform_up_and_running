@@ -213,4 +213,9 @@ So far our work has been to build a clean and simple API for deploying our clust
         - First we can configure the ASG `name` parameter to depend on the name of the launch configuration (so when the launch config name changes, terraform will see that and force a replacement of the ASG).
         - Set `create_before_destroy` to `true` for the ASG.
         - Set `min_elb_capacity` of the ASG to the `min_size` of the cluster so that terraform will wait for at least that many new servers in the new ASG to be created before passing health checks in the ALB and destroying the original ASG.
-        - A nice feature here is that during the rollout of the new ASG, if there is any issues preventing the new instances of launching, terraform will roll back to the last version after a `wait_for_capacity_timeou` (default is 10 minutes) of the `min_elb_capacity` we set to register with the ALB.
+        - A nice feature here is that during the rollout of the new ASG, if there is any issues preventing the new instances of launching, terraform will roll back to the last version after a `wait_for_capacity_timeout` (default is 10 minutes) of the `min_elb_capacity` we set to register with the ALB.
+- **Coming back to this chapter after fixing some issues with my configs**
+
+## Chapter 6 - Managing Secrets with Terraform
+- **Secret Management Basics**
+    - First (and second) rule of secrets management is to **never** store your secrets in plain text!

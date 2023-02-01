@@ -6,6 +6,7 @@ module "webserver_cluster" {
     source = "../../../../modules/services/webserver-cluster"
 
     ami         = "ami-0fb653ca2d3203ac1"
+    server_text = "Hello, world again!"
 
     cluster_name           = "webservers-stage"
     db_remote_state_bucket = "terraform-up-and-running-state-book-jcook"
