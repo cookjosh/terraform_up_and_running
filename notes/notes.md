@@ -217,5 +217,31 @@ So far our work has been to build a clean and simple API for deploying our clust
 - **Coming back to this chapter after fixing some issues with my configs**
 
 ## Chapter 6 - Managing Secrets with Terraform
-- **Secret Management Basics**
-    - First (and second) rule of secrets management is to **never** store your secrets in plain text!
+- **Secret Management Tools**
+    - **Types of secrets you store** - it's important to understand the different types of secrets you are storing, as that will determine how best to do that.
+        - The way you'd store say personal secrets is different than infrastructure secrets, because the use case is different. For instance, you may need to frequently decrypt an infrastructure secret for use, so that might be stored with some reversible encryption method. Whereas storing customer secrets might just be a salted hash as the secrets are just meant to be stored and not used.
+        - The book offers further explanations of methods to store secrets and a comparison chart of use cases and possible providers.
+- **Secret Management Tools with Terraform**
+    - **Providers** - working with providers requires the use of secrets to authenticate to that provider. For instance, running `apply` against the AWS provider requires the use of your access key.
+        - **Human Users** - reference the book or blog for more info on this, but the author generally compares and contrasts hardcoding in provider definition (never do), to setting environment variables, to other CLI tools you can use.
+        - **Machine Users** - how you might want to setup an autonomous system (for example a CI server) to authenticate with a provider to run your code depends on from and to what machines you're completing this workflow.
+            - *CircleCI with stored secrets* - This example uses CircleCI to illustrate how you can define the workflow for your pipeline to run terraform commands with your code, using credentials you create for a "machine user" and store within the CircleCI's secrets manager, CircleCI Context. At runtime, Context exposes the secrets to that server in the form of environment variables.
+            - *EC2 with Jenkins as a CI server, with IAM roles* - using an EC2 instance to run terraform (eg Jenkins on EC2 as a CI server), a solution is to use an `IAM role`.
+                - See the blog or book for an example of setting up the role and policy resources, data sources, etc...
+                - Note that all EC2 instances expose an *instance metadata endpoint* on every EC2 instance, and instances with IAM roles attached will include AWS credentials. Tools like Terraform that use the AWS SDK know how to use those endpoint credentials when running commands like `apply`.
+                - These creds are always temporary and rotated automatically.
+            - *Github Actions as a CI Server with OIDC* - OIDC allows third-party CI tools like Github Actions to authenticate to your cloud provider without any manual management of credentials (like in the CircleCI example).
+                - See the book for more detailed example.
+    - **Resources and Data Sources** - recall the example we've seen throughout the book of `aws_db_instance` needing the preconfigured username and password. Remember, never put these credentials in your code in plain text!
+        - **Environment Variables** - one method we can use is pass environment variables at `plan` or `apply` time.
+            - Create `variable` definitions for `db_username` and `db_password`.
+            - In the resource definition for the db, we can pass `var.db_[username/password]` as values, and in our CLI `export TF_VAR_db_[username/password]=(actual values)`
+            - Drawbacks to this method include a) not everything is defined in terraform (there's the extra step of setting our local environment variables), b) there's no standard for how people save the secrets themselves, and c) the secrets are not versioned or tested, so configuration errors between environments can happen.
+        - **Encrypted Files** - as mentioned before, we can use an encrypted file checked in to version control to retrieve necessary secrets.
+            - See the book for detailed example but in essence, we can leverage AWS KMS with terraform to defnie a *Customer Managed Key* (CMK) to encrypt and decrypt the file.
+            - The key is never exposed to us as local users, and permissions for the key can be granted to the current user.
+            - Note that if you want to change information in the encrypted file, it does require manually decryption and re-encryption.
+            - Drawbacks to this approach can include more manual commands, more integrations required with automated tests, rotating and revoking secrets is hard (everything's checked in), auditing can be difficult (we can see who used KMS but not what for), etc...
+        - **Secret Stores**
+
+
