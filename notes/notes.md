@@ -242,6 +242,34 @@ So far our work has been to build a clean and simple API for deploying our clust
             - The key is never exposed to us as local users, and permissions for the key can be granted to the current user.
             - Note that if you want to change information in the encrypted file, it does require manually decryption and re-encryption.
             - Drawbacks to this approach can include more manual commands, more integrations required with automated tests, rotating and revoking secrets is hard (everything's checked in), auditing can be difficult (we can see who used KMS but not what for), etc...
-        - **Secret Stores**
+        - **Secret Stores** - many cloud providers (and other third-party providers) offer some type of built-in key store. AWS' version is *Secrets Manager*
+            - We can create JSON blobs of secrets in Secrets Manager, define `data` blocks to retrieve that information, parse that JSON with `jsondecode` function in a `locals` block, and use those `local` values in our resource definition.
+            - This approach allows for pretty much the entire work flow to be codified, allow for more granular logging and standardization, and other benefits.
+            - There are drawbacks like cost, self-hosting if using something like Vault, automated environments need to auth to provider, etc...
+    - **State Files and Plan Files**
+        - We will also see secrets in State and Plan files when using terraform.
+        - **State Files** - any secrets we pass during `apply`, no matter how securely we do this, will end up in plain text in the state file. To mitigate this issue:
+            - You should always store state in a backend that supports encryption
+            - Implement strict controls on access to your state files.
+        - **Plan Files** - when running `plan`, it is possible to store that output of `plan` into a file, using `terraform plan -out=example.plan`, and run `apply` against that plan, using `terraform apply example.plan`.
+            - The issue this creates is that `plan` also outputs secrets it will use, and outputting into a file means those secrets are stored in plain text.
+            - If you are keeping your output files, encrypt them.
+            - Also apply strict access controls to plan files.
+
+## Chapter 7 - Working with Multiple Providers
+- **Working with One Provider**
+So far all examples throughout the book have used one provider (aws) and one region within the provider (us-east-2). But what if we need to work with different regions, or multiple providers? This chapter will take a deeper dive into providers and how we might best leverage them in different scenarios.
+    - **What is a Provider**
+        - How does Terraform actually work with providers? Under the hood, terraform consists of two parts:
+            - `Core`: The `terraform` binary, written in Go, that provides the basic functionality used by all platforms, the CLI (eg `plan` and `apply`), the dependency graph, etc...
+            - `Providers`: The code for each provider plugin, living in its own repo, and usually created and maintained by employees at the provider itself (ie a group of AWS employees work on the `aws` provider).
+    - **How do You Install Providers**
+        - For major providers, adding the `provider "aws" {}` definition is generally all you need to download and install the plugin! Running the `init` command does this work for you.
+        - So far we've used a minimal definition for `aws` provider but in production, you'd probably want more control over the version, the download source, etc... You can do this by defining a `required_providers` block within your `terraform {}` definition like so `terraform { required_providers { <LOCAL_NAME> = { source "<URL>", version = "<VERSION>" }}}` where:
+            - `LOCAL_NAME` = the name you will use in your `provider` definition, and most major providers have a *preferred local name*, like `aws` that should be used. There may be situations however where some providers use the same preferred local name (eg `http`), so you may need to define a custom one here.
+            - `URL` = The download source of the plugin, typically in the format `[<HOSTNAME>/]<NAMESPACE>/<TYPE>`. For example the URL for the official aws plugin is `registry.terraform.io/hashicorp/aws`. Note that `registry.terraform.io` is the *default* hostname source, so you can actually omit this if you intend to download from there, so `hashicorp/aws` would suffice.
+            - `VERSION` = We'll see more of this in a later chapter, but know that you can specify a version, a version range, or use other parameters here. An example syntax for downloading any 4.x version would be `verion = "~> 4.0"`
+    - **How do You Use Providers**
+- **Working with Multiple Copies of the Same Provider**
 
 

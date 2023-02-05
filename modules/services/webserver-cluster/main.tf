@@ -1,5 +1,12 @@
 
 terraform {
+    required_providers {
+      aws = {
+        source  = "hashicorp/aws"
+        version = "~> 4.0"
+      }
+    }
+
     backend "s3" {
         bucket         = "terraform-up-and-running-state-book-jcook" # Using the name of the bucket we created below
         key            = "stage/services/webserver-cluster/terraform.tfstate"
@@ -8,6 +15,10 @@ terraform {
         dynamodb_table = "terraform-up-and-running-locks"
         encrypt        = true     
     }
+}
+
+provider "aws" {
+    region = "us-east-2"  
 }
 
 resource "aws_launch_configuration" "example" {
