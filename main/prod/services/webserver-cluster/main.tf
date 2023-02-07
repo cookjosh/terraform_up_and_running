@@ -2,6 +2,17 @@ provider "aws" {
     region = "us-east-2"
 }
 
+terraform {
+    backend "s3" {
+        bucket         = "terraform-up-and-running-state-book-jcook" # Using the name of the bucket we created below
+        key            = "prod/services/webserver-cluster/terraform.tfstate"
+        region         = "us-east-2"
+        profile        = "tf-course"
+        dynamodb_table = "terraform-up-and-running-locks"
+        encrypt        = true     
+    }
+}
+
 module "webserver_cluster" {
     source = "../../../../modules/services/webserver-cluster"
 

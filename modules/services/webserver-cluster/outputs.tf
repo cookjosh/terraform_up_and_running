@@ -18,3 +18,13 @@ output "alb_security_group_id" {
     description = "ID of the SG attached to the LB"
   
 }
+
+output "region_1" {
+    value       = data.aws_region.region_1.name
+    description = "Name of the first region"
+}
+
+output "region_2" {
+    value       = data.aws_region.region_2.name
+    description = "Name of the second region"
+}

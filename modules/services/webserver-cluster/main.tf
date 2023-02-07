@@ -6,19 +6,16 @@ terraform {
         version = "~> 4.0"
       }
     }
-
-    backend "s3" {
-        bucket         = "terraform-up-and-running-state-book-jcook" # Using the name of the bucket we created below
-        key            = "stage/services/webserver-cluster/terraform.tfstate"
-        region         = "us-east-2"
-        profile        = "tf-course"
-        dynamodb_table = "terraform-up-and-running-locks"
-        encrypt        = true     
-    }
 }
 
 provider "aws" {
-    region = "us-east-2"  
+    region = "us-east-2"
+    alias  = "region_1"  
+}
+
+provider "aws" {
+    region = "us-west-1"
+    alias  = "region_2"
 }
 
 resource "aws_launch_configuration" "example" {
@@ -212,6 +209,14 @@ data "terraform_remote_state" "db" {
         key    = var.db_remote_state_key
         region = "us-east-2"
     }
+}
+
+data "aws_region" "region_1" {
+
+}
+
+data "aws_region" "region_2" {
+    
 }
 
 locals {
